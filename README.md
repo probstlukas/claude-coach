@@ -1,8 +1,17 @@
-# Claude Coach
+# Claude Coach (Fork with Strength Training Support)
 
-Claude Coach allows you to use Claude to create custom-tailored training programs for triathlons, marathons, and other endurance activities. Using a data-driven approach and principles from top training plans, Claude will create a training plan that's uniquely fit for you, your personal fitness, and the constraints you have in the next couple of weeks. Maybe you're recovering from an injury, maybe you're traveling and don't have access to a pool or track in a certain week - tell Claude about it and it'll create a plan that works for you.
+> **Fork of [felixrieseberg/claude-coach](https://github.com/felixrieseberg/claude-coach)** — adds gym/strength training insights alongside endurance planning.
 
-The output is a beautiful training plan app that allows you to add, edit, or move workouts, mark them as complete, and update key training data like heart rate zones, LTHR, threshold paces, FTP, and others. Your data is kept locally in your browser.
+Claude Coach allows you to use Claude to create custom-tailored training programs for triathlons, marathons, and other endurance activities — **and now also for hybrid athletes who combine gym training with endurance sports**. Using a data-driven approach and principles from top training plans, Claude will create a training plan that's uniquely fit for you, your personal fitness, and the constraints you have in the next couple of weeks.
+
+**New in this fork:**
+
+- **Strong app CSV import** — analyze your gym workout history (exercises, sets, reps, weight)
+- **Strength Insights dashboard** — weekly volume charts, muscle distribution, exercise progress, PR tracking, plateau detection
+- **Hybrid athlete support** — plans that intelligently schedule gym sessions around endurance training
+- **CLI command**: `npx claude-coach import-strength <csv>` to parse and analyze gym data
+
+The output is a beautiful training plan app that allows you to add, edit, or move workouts, mark them as complete, and update key training data like heart rate zones, LTHR, threshold paces, FTP, and others. When strength data is included, a **Strength Insights** tab shows charts and analytics from your gym history. Your data is kept locally in your browser.
 
 Workouts can be exported as simple calendar events (.ics), Zwift (.zwo), Garmin (.fit), or TrainerRoad/ERG (.mrc) workouts.
 
@@ -56,9 +65,34 @@ Claude needs a `Client ID` and `Client Secret` to access your Strava activities.
 3. Check the box to agree to Strava's API Agreement and click **Create**
 4. Copy your **Client ID** and **Client Secret** and give them to Claude when prompted
 
-#### Option 2: Manual Entry
+#### Option 2: Import Gym Workout Data (Strong / Hevy)
 
-Don't use Strava, or prefer not to connect it? No problem. You can tell Claude about your fitness directly. Be prepared to share:
+If you track gym workouts with [Strong](https://www.strong.app/) or [Hevy](https://www.hevyapp.com/), you can import your workout history via CSV export:
+
+**Strong:**
+
+1. Open Strong → Profile → Settings → Export Data → CSV
+
+**Hevy:**
+
+1. Open Hevy → Settings → Export Data → CSV
+2. Note: Hevy has a public API, but it requires a Hevy Pro subscription. CSV export works for all users.
+
+Give Claude the path to the exported CSV file and it will analyze your exercises, volume, PRs, and trends. This works standalone (strength-only analysis) or combined with Strava data for a complete hybrid training picture.
+
+**CLI usage:**
+
+```bash
+# Standalone strength analysis
+npx claude-coach import-strength workouts.csv --output strength.json
+
+# Merge into existing training plan
+npx claude-coach import-strength workouts.csv --plan plan.json --output plan.html
+```
+
+#### Option 3: Manual Entry
+
+Don't use Strava or Strong, or prefer not to connect them? No problem. You can tell Claude about your fitness directly. Be prepared to share:
 
 **Current Training (recent 4-8 weeks):**
 
