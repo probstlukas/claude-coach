@@ -16,6 +16,10 @@ import { getValidTokens } from "./strava/oauth.js";
 import { getAllActivities, getAthlete } from "./strava/api.js";
 import type { StravaActivity, StravaTokenResponse } from "./strava/types.js";
 import { readFileSync, writeFileSync } from "fs";
+import { parseStrongCSV } from "./strength/parser.js";
+import { analyzeStrengthData } from "./strength/analyzer.js";
+import { analyzeRunningData, type RawStravaRun } from "./running/analyzer.js";
+import { startServer } from "./server.js";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { ProxyAgent, setGlobalDispatcher } from "undici";
@@ -68,11 +72,39 @@ interface AuthArgs {
   code?: string;
 }
 
+interface ImportStrengthArgs {
+  command: "import-strength";
+  csvFile: string;
+  planFile?: string;
+  outputFile?: string;
+}
+
+interface ImportRunningArgs {
+  command: "import-running";
+  planFile?: string;
+  outputFile?: string;
+}
+
+interface ServeArgs {
+  command: "serve";
+  planFile: string;
+  port: number;
+  backupFile?: string;
+}
+
 interface HelpArgs {
   command: "help";
 }
 
-type CliArgs = SyncArgs | RenderArgs | QueryArgs | AuthArgs | HelpArgs;
+type CliArgs =
+  | SyncArgs
+  | RenderArgs
+  | QueryArgs
+  | AuthArgs
+  | ImportStrengthArgs
+  | ImportRunningArgs
+  | ServeArgs
+  | HelpArgs;
 
 function parseArgs(): CliArgs {
   const args = process.argv.slice(2);
@@ -152,6 +184,83 @@ function parseArgs(): CliArgs {
     return authArgs;
   }
 
+  if (args[0] === "import-strength") {
+    if (!args[1]) {
+      log.error("import-strength command requires a CSV file path");
+      process.exit(1);
+    }
+
+    const importArgs: ImportStrengthArgs = {
+      command: "import-strength",
+      csvFile: args[1],
+    };
+
+    for (let i = 2; i < args.length; i++) {
+      if ((args[i] === "--plan" || args[i] === "-p") && args[i + 1]) {
+        importArgs.planFile = args[i + 1];
+        i++;
+      } else if (args[i].startsWith("--plan=")) {
+        importArgs.planFile = args[i].split("=")[1];
+      } else if ((args[i] === "--output" || args[i] === "-o") && args[i + 1]) {
+        importArgs.outputFile = args[i + 1];
+        i++;
+      } else if (args[i].startsWith("--output=")) {
+        importArgs.outputFile = args[i].split("=")[1];
+      }
+    }
+
+    return importArgs;
+  }
+
+  if (args[0] === "serve") {
+    if (!args[1]) {
+      log.error("serve command requires a plan JSON file");
+      process.exit(1);
+    }
+
+    const serveArgs: ServeArgs = {
+      command: "serve",
+      planFile: args[1],
+      port: 3000,
+    };
+
+    for (let i = 2; i < args.length; i++) {
+      if ((args[i] === "--port" || args[i] === "-p") && args[i + 1]) {
+        serveArgs.port = parseInt(args[i + 1]);
+        i++;
+      } else if (args[i].startsWith("--port=")) {
+        serveArgs.port = parseInt(args[i].split("=")[1]);
+      } else if ((args[i] === "--backup" || args[i] === "-b") && args[i + 1]) {
+        serveArgs.backupFile = args[i + 1];
+        i++;
+      } else if (args[i].startsWith("--backup=")) {
+        serveArgs.backupFile = args[i].split("=")[1];
+      }
+    }
+
+    return serveArgs;
+  }
+
+  if (args[0] === "import-running") {
+    const runArgs: ImportRunningArgs = { command: "import-running" };
+
+    for (let i = 1; i < args.length; i++) {
+      if ((args[i] === "--plan" || args[i] === "-p") && args[i + 1]) {
+        runArgs.planFile = args[i + 1];
+        i++;
+      } else if (args[i].startsWith("--plan=")) {
+        runArgs.planFile = args[i].split("=")[1];
+      } else if ((args[i] === "--output" || args[i] === "-o") && args[i + 1]) {
+        runArgs.outputFile = args[i + 1];
+        i++;
+      } else if (args[i].startsWith("--output=")) {
+        runArgs.outputFile = args[i].split("=")[1];
+      }
+    }
+
+    return runArgs;
+  }
+
   if (args[0] === "--help" || args[0] === "-h" || args[0] === "help") {
     return { command: "help" };
   }
@@ -167,11 +276,14 @@ Claude Coach - Training Plan Tools
 Usage: npx claude-coach <command> [options]
 
 Commands:
-  sync              Sync activities from Strava
-  auth              Get Strava authorization URL or exchange code for tokens
-  render <file>     Render a training plan JSON to HTML
-  query <sql>       Run a SQL query against the database
-  help              Show this help message
+  sync                      Sync activities from Strava
+  auth                      Get Strava authorization URL or exchange code for tokens
+  render <file>             Render a training plan JSON to HTML
+  serve <file>              Serve plan with live auto-save (recommended)
+  import-strength <csv>     Import strength data from Strong/Hevy CSV export
+  import-running            Import running data from synced Strava database
+  query <sql>               Run a SQL query against the database
+  help                      Show this help message
 
 Auth Options (for headless/Claude environments):
   --client-id=ID        Strava API client ID
@@ -206,6 +318,12 @@ Examples:
 
   # Render a training plan to HTML
   npx claude-coach render plan.json --output my-plan.html
+
+  # Import strength data from Strong CSV export
+  npx claude-coach import-strength workouts.csv --output strength.json
+
+  # Merge strength data into an existing training plan
+  npx claude-coach import-strength workouts.csv --plan plan.json --output plan-with-strength.json
 
   # Query the database
   npx claude-coach query "SELECT * FROM weekly_volume LIMIT 5"
@@ -590,6 +708,135 @@ async function runQuery(args: QueryArgs): Promise<void> {
 }
 
 // ============================================================================
+// Import Strength Command
+// ============================================================================
+
+function runImportStrength(args: ImportStrengthArgs): void {
+  log.start("Importing strength training data...");
+
+  // Read CSV
+  let csvContent: string;
+  try {
+    csvContent = readFileSync(args.csvFile, "utf-8");
+  } catch (err) {
+    log.error(`Could not read CSV file: ${args.csvFile}`);
+    process.exit(1);
+  }
+
+  // Parse and analyze
+  const parsed = parseStrongCSV(csvContent);
+  log.info(`Parsed ${parsed.sets.length} sets from ${parsed.workoutDates.size} workouts`);
+
+  const strengthData = analyzeStrengthData(parsed);
+  log.success(`Analyzed ${strengthData.exercises.length} exercises`);
+  log.info(`  Total volume: ${strengthData.kpis.totalVolume.toLocaleString()} kg`);
+  log.info(
+    `  Date range: ${strengthData.kpis.dateRange.start} to ${strengthData.kpis.dateRange.end}`
+  );
+  log.info(`  ${strengthData.recentPRs.length} PRs detected`);
+
+  // Output
+  if (args.planFile) {
+    // Merge into existing plan
+    let planJson: string;
+    try {
+      planJson = readFileSync(args.planFile, "utf-8");
+    } catch (err) {
+      log.error(`Could not read plan file: ${args.planFile}`);
+      process.exit(1);
+    }
+
+    const plan = JSON.parse(planJson);
+    plan.strengthData = strengthData;
+
+    const outputPath = args.outputFile || args.planFile;
+    writeFileSync(outputPath, JSON.stringify(plan, null, 2));
+    log.success(`Strength data merged into plan: ${outputPath}`);
+  } else {
+    // Output standalone
+    const output = JSON.stringify(strengthData, null, 2);
+    if (args.outputFile) {
+      writeFileSync(args.outputFile, output);
+      log.success(`Strength data written to: ${args.outputFile}`);
+    } else {
+      console.log(output);
+    }
+  }
+}
+
+// ============================================================================
+// Import Running Command
+// ============================================================================
+
+async function runImportRunning(args: ImportRunningArgs): Promise<void> {
+  log.start("Importing running data from Strava...");
+
+  await initDatabase();
+
+  // Query all runs from Strava DB
+  const rawJson = queryJson(
+    `SELECT id, name, sport_type, date(start_date) as date, moving_time, distance,
+            average_speed, max_speed, average_heartrate, max_heartrate,
+            total_elevation_gain, suffer_score, calories, workout_type
+     FROM activities
+     WHERE sport_type IN ('Run', 'TrailRun')
+     ORDER BY start_date ASC`
+  );
+
+  const rawRuns: RawStravaRun[] = (rawJson as Record<string, unknown>[]).map((r) => ({
+    id: r.id as number,
+    name: r.name as string,
+    sport_type: r.sport_type as string,
+    date: r.date as string,
+    moving_time: r.moving_time as number,
+    distance: r.distance as number,
+    average_speed: r.average_speed as number,
+    max_speed: r.max_speed as number,
+    average_heartrate: r.average_heartrate as number | null,
+    max_heartrate: r.max_heartrate as number | null,
+    total_elevation_gain: (r.total_elevation_gain as number) || 0,
+    suffer_score: r.suffer_score as number | null,
+    calories: r.calories as number | null,
+    workout_type: r.workout_type as number | null,
+  }));
+
+  log.info(`Found ${rawRuns.length} runs in Strava database`);
+
+  const runningData = analyzeRunningData(rawRuns);
+  log.success(`Analyzed ${runningData.runs.length} runs`);
+  log.info(`  Total distance: ${runningData.kpis.totalDistanceKm} km`);
+  log.info(`  Average pace: ${runningData.kpis.avgPacePerKm}`);
+  log.info(
+    `  Date range: ${runningData.kpis.dateRange.start} to ${runningData.kpis.dateRange.end}`
+  );
+
+  if (args.planFile) {
+    let planJson: string;
+    try {
+      planJson = readFileSync(args.planFile, "utf-8");
+    } catch (err) {
+      log.error(`Could not read plan file: ${args.planFile}`);
+      process.exit(1);
+    }
+
+    const plan = JSON.parse(planJson);
+    plan.runningData = runningData;
+
+    const outputPath = args.outputFile || args.planFile;
+    writeFileSync(outputPath, JSON.stringify(plan, null, 2));
+    log.success(`Running data merged into plan: ${outputPath}`);
+  } else {
+    const output = JSON.stringify(runningData, null, 2);
+    if (args.outputFile) {
+      writeFileSync(args.outputFile, output);
+      log.success(`Running data written to: ${args.outputFile}`);
+    } else {
+      console.log(output);
+    }
+  }
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
@@ -608,6 +855,15 @@ async function main() {
       break;
     case "render":
       runRender(args);
+      break;
+    case "serve":
+      startServer({ planFile: args.planFile, port: args.port, backupFile: args.backupFile });
+      break;
+    case "import-strength":
+      runImportStrength(args);
+      break;
+    case "import-running":
+      await runImportRunning(args);
       break;
     case "query":
       await runQuery(args);
