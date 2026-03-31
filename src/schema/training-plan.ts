@@ -342,6 +342,172 @@ export interface RaceStrategy {
 }
 
 // ============================================================================
+// Strength Training Data (from Strong/Hevy CSV export)
+// ============================================================================
+
+export type MuscleGroup = "Chest" | "Back" | "Shoulders" | "Biceps" | "Triceps" | "Legs" | "Core";
+
+export type StrengthTrend = "gaining" | "plateau" | "declining" | "inactive" | "insufficient_data";
+
+export interface StrengthSet {
+  setOrder: string;
+  weight: number;
+  reps: number;
+  isWarmup: boolean;
+  volume: number;
+}
+
+export interface StrengthExerciseSession {
+  date: string;
+  workoutName: string;
+  sets: StrengthSet[];
+  maxWeight: number;
+  totalVolume: number;
+  totalSets: number;
+  totalReps: number;
+}
+
+export interface StrengthExercise {
+  name: string;
+  muscleGroup: MuscleGroup;
+  sessions: StrengthExerciseSession[];
+  totalSets: number;
+  totalVolume: number;
+  bestWeight: number;
+  bestVolume: number;
+  trend: StrengthTrend;
+  pr?: {
+    weight: { value: number; date: string };
+    volume: { value: number; date: string };
+  };
+}
+
+export interface StrengthWorkoutSession {
+  date: string;
+  name: string;
+  duration: string;
+  durationMinutes: number;
+  exercises: string[];
+  totalVolume: number;
+  totalSets: number;
+}
+
+export interface StrengthKPIs {
+  totalWorkouts: number;
+  totalVolume: number;
+  totalHours: number;
+  avgWorkoutMinutes: number;
+  totalWorkingSets: number;
+  mostTrainedExercise: string;
+  dateRange: { start: string; end: string };
+}
+
+export interface StrengthVolumeWeek {
+  weekStart: string;
+  weekLabel: string;
+  totalVolume: number;
+  workoutCount: number;
+}
+
+export interface StrengthMuscleDistribution {
+  muscleGroup: MuscleGroup;
+  sets: number;
+  percentage: number;
+}
+
+export interface StrengthData {
+  kpis: StrengthKPIs;
+  exercises: StrengthExercise[];
+  workouts: StrengthWorkoutSession[];
+  weeklyVolume: StrengthVolumeWeek[];
+  muscleDistribution: StrengthMuscleDistribution[];
+  dayOfWeekDistribution: { day: string; count: number }[];
+  recentPRs: { exercise: string; type: "weight" | "volume"; value: number; date: string }[];
+}
+
+// ============================================================================
+// Running Data (from Strava)
+// ============================================================================
+
+export type RunType = "easy" | "moderate" | "tempo" | "interval" | "long" | "race" | "trail";
+
+export interface RunActivity {
+  id: number;
+  name: string;
+  date: string;
+  sportType: string;
+  movingTimeSeconds: number;
+  distanceMeters: number;
+  averagePaceSecsPerKm: number;
+  averageSpeedMs: number;
+  maxSpeedMs: number;
+  averageHeartrate: number | null;
+  maxHeartrate: number | null;
+  elevationGain: number;
+  sufferScore: number | null;
+  calories: number | null;
+  runType: RunType;
+}
+
+export interface RunningKPIs {
+  totalRuns: number;
+  totalDistanceKm: number;
+  totalHours: number;
+  avgPacePerKm: string;
+  avgHeartrate: number;
+  totalElevation: number;
+  longestRunKm: number;
+  fastestPacePerKm: string;
+  dateRange: { start: string; end: string };
+}
+
+export interface RunningVolumeWeek {
+  weekStart: string;
+  weekLabel: string;
+  distanceKm: number;
+  runCount: number;
+  avgPaceSecsPerKm: number;
+  avgHeartrate: number | null;
+  elevationGain: number;
+}
+
+export interface RunningMonthVolume {
+  month: string;
+  monthLabel: string;
+  distanceKm: number;
+  runCount: number;
+  totalHours: number;
+}
+
+export interface RunningHRZoneDistribution {
+  zone: number;
+  name: string;
+  hrLow: number;
+  hrHigh: number;
+  runCount: number;
+  percentage: number;
+}
+
+export interface RunningPaceProgression {
+  month: string;
+  avgPaceSecsPerKm: number;
+  avgPace: string;
+}
+
+export interface RunningData {
+  kpis: RunningKPIs;
+  runs: RunActivity[];
+  weeklyVolume: RunningVolumeWeek[];
+  monthlyVolume: RunningMonthVolume[];
+  hrZoneDistribution: RunningHRZoneDistribution[];
+  paceProgression: RunningPaceProgression[];
+  runTypeDistribution: { type: RunType; count: number; percentage: number }[];
+  dayOfWeekDistribution: { day: string; count: number; avgDistanceKm: number }[];
+  longestRuns: RunActivity[];
+  fastestRuns: RunActivity[];
+}
+
+// ============================================================================
 // Complete Training Plan
 // ============================================================================
 
@@ -365,6 +531,8 @@ export interface TrainingPlan {
   phases: TrainingPhase[];
   weeks: TrainingWeek[];
   raceStrategy: RaceStrategy;
+  strengthData?: StrengthData;
+  runningData?: RunningData;
 }
 
 // ============================================================================
