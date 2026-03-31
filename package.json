@@ -36,6 +36,7 @@
   },
   "dependencies": {
     "@garmin/fitsdk": "^21.178.0",
+    "chart.js": "^4.5.1",
     "consola": "^3.2.3",
     "jszip": "^3.10.1",
     "open": "^10.1.0",

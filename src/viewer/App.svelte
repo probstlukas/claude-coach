@@ -5,6 +5,9 @@
   import WorkoutModal from "./components/WorkoutModal.svelte";
   import SettingsModal from "./components/SettingsModal.svelte";
   import ImportHelpModal from "./components/ImportHelpModal.svelte";
+  import StrengthDashboard from "./components/StrengthDashboard.svelte";
+  import RunningDashboard from "./components/RunningDashboard.svelte";
+  import { onMount } from "svelte";
   import { planData, loadCompleted, saveCompleted } from "./stores/plan.js";
   import { loadSettings, saveSettings, type Settings } from "./stores/settings.js";
   import {
@@ -13,16 +16,49 @@
     type PlanChanges,
     generateWorkoutId,
   } from "./stores/changes.js";
+  import { initPersistence, saveToServer, isServerMode } from "./stores/persistence.js";
   import type { Workout, TrainingDay } from "../schema/training-plan.js";
 
   // Reactive state
   let settings = $state(loadSettings());
   let completed = $state(loadCompleted());
   let changes = $state(loadChanges());
+
+  // Auto-save to server whenever state changes
+  function syncToServer() {
+    saveToServer({
+      completed,
+      changes,
+      settings,
+      savedAt: new Date().toISOString(),
+    });
+  }
+
+  // Load backup from server on mount
+  onMount(async () => {
+    const backup = await initPersistence();
+    if (backup) {
+      if (backup.completed) completed = backup.completed;
+      if (backup.changes) changes = backup.changes as PlanChanges;
+      if (backup.settings) settings = { ...settings, ...backup.settings } as Settings;
+      // Also persist to localStorage so the stores stay in sync
+      saveCompleted(completed);
+      saveChanges(changes);
+      syncToServer();
+      saveSettings(settings);
+    }
+  });
   let filters = $state({ sport: "all", status: "all" });
   let sidebarOpen = $state(false);
   let settingsOpen = $state(false);
   let importHelpOpen = $state(false);
+
+  // View toggle
+  type ActiveView = "plan" | "strength" | "running";
+  let activeView = $state<ActiveView>("plan");
+  const hasStrengthData = !!planData.strengthData;
+  const hasRunningData = !!planData.runningData;
+  const hasInsights = hasStrengthData || hasRunningData;
 
   // First-change banner state
   const bannerKey = `plan-${planData.meta.id}-banner-dismissed`;
@@ -66,6 +102,7 @@
   function handleSettingsChange(newSettings: Settings) {
     settings = newSettings;
     saveSettings(newSettings);
+    syncToServer();
   }
 
   function handleToggleComplete(workoutId: string) {
@@ -76,6 +113,7 @@
       completed = { ...completed, [workoutId]: true };
     }
     saveCompleted(completed);
+    syncToServer();
     triggerBanner();
   }
 
@@ -101,6 +139,7 @@
     }
     changes = { ...changes };
     saveChanges(changes);
+    syncToServer();
     triggerBanner();
   }
 
@@ -125,6 +164,7 @@
       changes.added[id] = { date: modalState.day.date, workout: fullWorkout };
       changes = { ...changes };
       saveChanges(changes);
+      syncToServer();
       triggerBanner();
       modalState = null;
     } else {
@@ -144,6 +184,7 @@
       }
       changes = { ...changes };
       saveChanges(changes);
+      syncToServer();
       triggerBanner();
 
       // Update the modal state with the new workout data
@@ -167,6 +208,7 @@
     }
     changes = { ...changes };
     saveChanges(changes);
+    syncToServer();
     triggerBanner();
     modalState = null;
   }
@@ -220,16 +262,52 @@
       <h2 class="mobile-title">{planData.meta?.event ?? "Training Plan"}</h2>
     </div>
 
-    <WeeksContainer
-      plan={planData}
-      {settings}
-      {filters}
-      {completed}
-      {changes}
-      onWorkoutClick={handleWorkoutClick}
-      onWorkoutMove={handleWorkoutMove}
-      onAddWorkout={handleAddWorkout}
-    />
+    {#if hasInsights}
+      <div class="view-toggle">
+        <button
+          class="view-tab"
+          class:active={activeView === "plan"}
+          onclick={() => (activeView = "plan")}
+        >
+          Training Plan
+        </button>
+        {#if hasRunningData}
+          <button
+            class="view-tab"
+            class:active={activeView === "running"}
+            onclick={() => (activeView = "running")}
+          >
+            Running Insights
+          </button>
+        {/if}
+        {#if hasStrengthData}
+          <button
+            class="view-tab"
+            class:active={activeView === "strength"}
+            onclick={() => (activeView = "strength")}
+          >
+            Strength Insights
+          </button>
+        {/if}
+      </div>
+    {/if}
+
+    {#if activeView === "running" && planData.runningData}
+      <RunningDashboard runningData={planData.runningData} />
+    {:else if activeView === "strength" && planData.strengthData}
+      <StrengthDashboard strengthData={planData.strengthData} />
+    {:else}
+      <WeeksContainer
+        plan={planData}
+        {settings}
+        {filters}
+        {completed}
+        {changes}
+        onWorkoutClick={handleWorkoutClick}
+        onWorkoutMove={handleWorkoutMove}
+        onAddWorkout={handleAddWorkout}
+      />
+    {/if}
   </main>
 </div>
 
@@ -347,6 +425,40 @@
   .banner-close svg {
     width: 14px;
     height: 14px;
+  }
+
+  .view-toggle {
+    display: flex;
+    gap: 0.25rem;
+    margin-bottom: 1.5rem;
+    background: var(--bg-secondary);
+    padding: 0.25rem;
+    border-radius: 10px;
+    border: 1px solid var(--border-subtle);
+    width: fit-content;
+  }
+
+  .view-tab {
+    padding: 0.5rem 1.25rem;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .view-tab.active {
+    background: var(--accent);
+    color: white;
+  }
+
+  .view-tab:not(.active):hover {
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
   }
 
   .main-content {
