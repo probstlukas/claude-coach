@@ -203,6 +203,7 @@
         {settings}
         {today}
         {completed}
+        specialEvents={plan.specialEvents}
         {filterWorkout}
         {onWorkoutClick}
         onDrop={handleDrop}

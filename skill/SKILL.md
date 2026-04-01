@@ -594,6 +594,53 @@ After both files are created, tell the user:
 
 ---
 
+## Special Events (Exams, Travel, etc.)
+
+Ask the athlete about upcoming life events that affect training. Add them to the `specialEvents` array in the plan JSON:
+
+```json
+"specialEvents": [
+  {
+    "id": "exam-1",
+    "name": "Calculus Final Exam",
+    "date": "2026-04-15",
+    "type": "exam",
+    "priority": "high",
+    "notes": "Morning exam, 3 hours",
+    "trainingAdjustment": {
+      "restBefore": false,
+      "restAfter": false,
+      "lightWorkoutOk": true,
+      "noTraining": false
+    }
+  }
+]
+```
+
+### Scheduling Around Special Events
+
+**Exams (cognitive priority):**
+
+- Day before: keep training light or rest. No heavy leg sessions (DOMS impairs focus).
+- Day of exam: a short easy run (20-30 min) in the morning BEFORE the exam can improve cognitive performance (increased blood flow, dopamine, reduced anxiety). Keep it Zone 1-2 only.
+- Day after: resume normal training.
+- Exam week: reduce total volume by ~20-30%, prioritize sleep.
+
+**Travel:**
+
+- Travel days: rest or very light bodyweight workout.
+- Day after arrival: easy session only (jet lag, disrupted sleep).
+- Multi-day trips: plan bodyweight alternatives or mark as planned rest.
+
+**Social/Work events:**
+
+- Schedule training around the event, don't skip it entirely unless it's a full-day commitment.
+- If evening event: move workout to morning.
+
+These events appear as visual badges on the calendar view and are included in ICS calendar exports.
+
+---
+
 ## Key Coaching Principles
 
 1. **Consistency over heroics**: Regular moderate training beats occasional big efforts

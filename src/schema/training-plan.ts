@@ -342,6 +342,31 @@ export interface RaceStrategy {
 }
 
 // ============================================================================
+// Special Events (exams, travel, etc.)
+// ============================================================================
+
+export type SpecialEventType = "exam" | "travel" | "social" | "work" | "medical" | "other";
+
+export type SpecialEventPriority = "high" | "medium" | "low";
+
+export interface SpecialEvent {
+  id: string;
+  name: string;
+  date: string; // ISO date
+  endDate?: string; // For multi-day events
+  type: SpecialEventType;
+  priority: SpecialEventPriority;
+  notes?: string;
+  // Training adjustments
+  trainingAdjustment?: {
+    restBefore: boolean; // Ensure rest day before
+    restAfter: boolean; // Ensure rest day after
+    lightWorkoutOk: boolean; // Short easy session is OK (e.g., morning run before exam)
+    noTraining: boolean; // Skip all training this day
+  };
+}
+
+// ============================================================================
 // Strength Training Data (from Strong/Hevy CSV export)
 // ============================================================================
 
@@ -531,6 +556,7 @@ export interface TrainingPlan {
   phases: TrainingPhase[];
   weeks: TrainingWeek[];
   raceStrategy: RaceStrategy;
+  specialEvents?: SpecialEvent[];
   strengthData?: StrengthData;
   runningData?: RunningData;
 }

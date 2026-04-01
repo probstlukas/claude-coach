@@ -1,8 +1,22 @@
 <script lang="ts">
-  import type { TrainingWeek, TrainingDay, Workout } from "../../schema/training-plan.js";
+  import type {
+    TrainingWeek,
+    TrainingDay,
+    Workout,
+    SpecialEvent,
+  } from "../../schema/training-plan.js";
   import type { Settings } from "../stores/settings.js";
   import WorkoutCard from "./WorkoutCard.svelte";
   import { parseDate } from "../lib/utils.js";
+
+  const eventTypeEmojis: Record<string, string> = {
+    exam: "\u{1F4DD}",
+    travel: "\u2708\uFE0F",
+    social: "\u{1F389}",
+    work: "\u{1F4BC}",
+    medical: "\u{1FA7A}",
+    other: "\u{1F4CC}",
+  };
 
   interface Props {
     week: TrainingWeek;
@@ -10,6 +24,7 @@
     settings: Settings;
     today: string;
     completed: Record<string, boolean>;
+    specialEvents?: SpecialEvent[];
     filterWorkout: (workout: Workout) => boolean;
     onWorkoutClick: (workout: Workout, day: TrainingDay) => void;
     onDrop: (workoutId: string, newDate: string) => void;
@@ -28,7 +43,14 @@
     onDrop,
     onAddWorkout,
     animationDelay,
+    specialEvents = [],
   }: Props = $props();
+
+  function eventsForDate(date: string): SpecialEvent[] {
+    return (specialEvents ?? []).filter(
+      (e) => e.date === date || (e.endDate && e.date <= date && e.endDate >= date)
+    );
+  }
 
   let dragOverDate = $state<string | null>(null);
 
@@ -68,6 +90,7 @@
       {@const isToday = day.date === today}
       {@const filteredWorkouts = (day.workouts ?? []).filter(filterWorkout)}
       {@const isDragOver = dragOverDate === day.date}
+      {@const dayEvents = eventsForDate(day.date)}
 
       <div
         class="day-column"
@@ -83,6 +106,13 @@
           <span class="day-name">{day.dayOfWeek.slice(0, 3)}</span>
           <span class="day-date">{parseDate(day.date).getDate()}</span>
         </div>
+
+        {#each dayEvents as event}
+          <div class="special-event {event.type}" title={event.notes || event.name}>
+            <span class="event-emoji">{eventTypeEmojis[event.type] || "\u{1F4CC}"}</span>
+            <span class="event-name">{event.name}</span>
+          </div>
+        {/each}
 
         {#if filteredWorkouts.length > 0}
           {#each filteredWorkouts as workout (workout.id)}
@@ -255,6 +285,47 @@
     color: var(--text-muted);
     font-size: 0.8rem;
     font-style: italic;
+  }
+
+  .special-event {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.5rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: rgba(245, 158, 11, 0.15);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    color: #f59e0b;
+  }
+
+  .special-event.exam {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+  }
+
+  .special-event.travel {
+    background: rgba(59, 130, 246, 0.15);
+    border-color: rgba(59, 130, 246, 0.3);
+    color: #3b82f6;
+  }
+
+  .special-event.medical {
+    background: rgba(16, 185, 129, 0.15);
+    border-color: rgba(16, 185, 129, 0.3);
+    color: #10b981;
+  }
+
+  .event-emoji {
+    font-size: 0.85rem;
+  }
+
+  .event-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .add-workout-btn {
