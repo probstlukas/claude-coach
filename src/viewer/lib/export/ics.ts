@@ -7,7 +7,13 @@
  * Each workout becomes an all-day event on its scheduled date.
  */
 
-import type { TrainingPlan, Workout, TrainingDay, Sport } from "../../../schema/training-plan.js";
+import type {
+  TrainingPlan,
+  Workout,
+  TrainingDay,
+  Sport,
+  SpecialEvent,
+} from "../../../schema/training-plan.js";
 import { formatDuration, getSportIcon } from "../utils.js";
 
 /**
@@ -23,11 +29,10 @@ function formatIcsDate(dateStr: string): string {
  */
 function escapeIcsText(text: string): string {
   return text
-    .replace(/\\/g, "\\\\") // Backslash
+    .replace(/\\/g, "\\\\") // Escape backslashes first
     .replace(/;/g, "\\;") // Semicolon
     .replace(/,/g, "\\,") // Comma
-    .replace(/\n/g, "\\n") // Newline
-    .replace(/\\n/g, "\\n"); // Handle already-escaped newlines from humanReadable
+    .replace(/\n/g, "\\n"); // Convert real newlines to ICS \n LAST
 }
 
 /**
@@ -77,18 +82,19 @@ function generateVevent(workout: Workout, day: TrainingDay, planName: string): s
   );
 
   // Description: include all workout details
+  // Use real newlines here — escapeIcsText converts them to ICS \n format
   let description = "";
   if (workout.description) {
-    description += workout.description + "\\n\\n";
+    description += workout.description + "\n\n";
   }
   if (duration) {
-    description += `Duration: ${duration}\\n`;
+    description += `Duration: ${duration}\n`;
   }
   if (workout.primaryZone) {
-    description += `Target Zone: ${workout.primaryZone}\\n`;
+    description += `Target Zone: ${workout.primaryZone}\n`;
   }
   if (workout.humanReadable) {
-    description += "\\nWorkout Structure:\\n" + workout.humanReadable.replace(/\\n/g, "\\n");
+    description += "\nWorkout Structure:\n" + workout.humanReadable;
   }
   description = escapeIcsText(description.trim());
 
@@ -142,6 +148,42 @@ export function generateIcs(plan: TrainingPlan): string {
         events.push(generateVevent(workout, day, eventName));
       }
     }
+  }
+
+  // Add special events (exams, travel, etc.)
+  for (const event of plan.specialEvents ?? []) {
+    const eventTypeEmojis: Record<string, string> = {
+      exam: "\u{1F4DD}",
+      travel: "\u2708\uFE0F",
+      social: "\u{1F389}",
+      work: "\u{1F4BC}",
+      medical: "\u{1FA7A}",
+      other: "\u{1F4CC}",
+    };
+    const emoji = eventTypeEmojis[event.type] || "\u{1F4CC}";
+    let eventDesc = event.notes || "";
+    if (event.trainingAdjustment) {
+      const adj = event.trainingAdjustment;
+      eventDesc += "\n\nTraining adjustment:";
+      if (adj.noTraining) eventDesc += "\n- No training this day";
+      else if (adj.lightWorkoutOk) eventDesc += "\n- Light workout OK (e.g., easy run)";
+      if (adj.restBefore) eventDesc += "\n- Rest day scheduled before";
+      if (adj.restAfter) eventDesc += "\n- Rest day scheduled after";
+    }
+
+    const specialEvent = [
+      "BEGIN:VEVENT",
+      `UID:${event.id}@claude-coach`,
+      `DTSTAMP:${now}`,
+      `DTSTART;VALUE=DATE:${formatIcsDate(event.date)}`,
+      `DTEND;VALUE=DATE:${formatIcsDate(event.endDate || event.date)}`,
+      foldLine(`SUMMARY:${emoji} ${escapeIcsText(event.name)}`),
+      foldLine(`DESCRIPTION:${escapeIcsText(eventDesc.trim())}`),
+      `CATEGORIES:${event.type},special-event`,
+      `TRANSP:OPAQUE`,
+      "END:VEVENT",
+    ].join("\r\n");
+    events.push(specialEvent);
   }
 
   // Add a race day event if we have a date
