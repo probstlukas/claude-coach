@@ -65,7 +65,7 @@
   let showBanner = $state(false);
 
   function triggerBanner() {
-    if (localStorage.getItem(bannerKey) !== "true") {
+    if (!isServerMode() && localStorage.getItem(bannerKey) !== "true") {
       showBanner = true;
     }
   }

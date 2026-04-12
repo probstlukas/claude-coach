@@ -48,15 +48,20 @@
     return h > 0 ? `${h}h ${m}m` : `${m}m`;
   }
 
-  const chartDefaults = {
-    color: "#94a3b8",
-    borderColor: "rgba(148, 163, 184, 0.1)",
-  };
+  function getChartDefaults() {
+    const style = getComputedStyle(document.documentElement);
+    return {
+      color: style.getPropertyValue("--text-muted").trim() || "#94a3b8",
+      borderColor: style.getPropertyValue("--border-subtle").trim() || "rgba(148, 163, 184, 0.1)",
+    };
+  }
+  let chartDefaults = { color: "#94a3b8", borderColor: "rgba(148, 163, 184, 0.1)" };
 
   // Which table to show
   let activeTable = $state<"longest" | "fastest">("longest");
 
   onMount(() => {
+    chartDefaults = getChartDefaults();
     // Weekly Mileage
     const weeklyCtx = (
       document.getElementById("run-chart-weekly") as HTMLCanvasElement
